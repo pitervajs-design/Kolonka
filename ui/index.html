@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kolonka AI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-icon" id="stateIcon">●</div>
+      <div class="header-text">
+        <h1>Kolonka AI</h1>
+        <span class="subtitle" id="stateLabel">Запуск...</span>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="chat" id="chat">
+      <div class="chat-msg system">Инициализация...</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="btn btn-ptt" id="btnPtt" title="Push-to-Talk">
+        <span class="btn-icon">🎙</span>
+        <span class="btn-label">Запись</span>
+      </button>
+
+      <button class="btn btn-vad" id="btnVad" title="Автопрослушивание — колонка слушает постоянно и реагирует на 'Джарвис'">
+        <span class="btn-icon">📡</span>
+        <span class="btn-label">Авто</span>
+      </button>
+
+      <button class="btn btn-clear" id="btnClear" title="Очистить историю">
+        <span class="btn-icon">🗑</span>
+        <span class="btn-label">Очистить</span>
+      </button>
+    </div>
+
+    <!-- Microphone selector -->
+    <div class="mic-bar">
+      <label for="micSelect">Микрофон:</label>
+      <select id="micSelect"></select>
+    </div>
+
+    <!-- Status bar -->
+    <div class="statusbar">
+      <span id="modeLabel">PTT</span>
+      <span id="statusInfo">—</span>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

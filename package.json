@@ -1,0 +1,56 @@
+{
+  "name": "kolonka-ai",
+  "version": "2.0.0",
+  "description": "Divoom Timebox Evo smart speaker with AI via OpenRouter",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "node index.js",
+    "electron": "electron .",
+    "devices": "node scripts/list-devices.js",
+    "build": "electron-builder --win",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ffmpeg-static": "^5.3.0",
+    "msedge-tts": "^2.0.4",
+    "node-divoom-timebox-evo": "^0.3.0",
+    "openai": "^4.77.0",
+    "serialport": "^12.0.0",
+    "vosk": "^0.3.39"
+  },
+  "devDependencies": {
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.kolonka-ai.app",
+    "productName": "Kolonka AI",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
+    },
+    "files": [
+      "electron-main.js",
+      "index.js",
+      "src/**/*",
+      "ui/**/*",
+      "assets/**/*",
+      ".env",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/ffmpeg-static",
+        "to": "ffmpeg-static",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}

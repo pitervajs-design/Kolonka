@@ -1,0 +1,10 @@
+node_modules/
+logs/
+data/
+models/
+.env
+*.log
+dist/
+build/
+*.mp3
+*.wav
