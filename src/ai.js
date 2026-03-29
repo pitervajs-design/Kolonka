@@ -1,5 +1,4 @@
 const OpenAI = require('openai');
-const LocalSTT = require('./stt-local');
 const EdgeTTS = require('./tts-edge');
 
 const EMOTION_PATTERNS = {
@@ -28,16 +27,10 @@ class AI {
       },
     });
 
-    this.model = config.model || 'x-ai/grok-4.1-fast';
+    this.model = config.model || 'google/gemini-2.0-flash-lite-001';
     this.systemPrompt = config.systemPrompt ||
       'Ты — умный голосовой помощник встроенный в колонку Divoom Timebox Evo. ' +
       'Отвечай кратко и по делу на русском языке. Ты дружелюбный и полезный.';
-
-    // Локальный STT (Vosk)
-    this.localSTT = new LocalSTT({
-      sampleRate: config.sttSampleRate || 16000,
-      modelPath: config.sttModelPath || undefined,
-    });
 
     // Локальный TTS (Edge TTS)
     this.edgeTTS = new EdgeTTS({
@@ -51,28 +44,27 @@ class AI {
     this.history = history;
   }
 
-  // ── Основной метод: Vosk STT → LLM → Edge TTS ──
+  // ── Основной метод: аудио → Gemini (STT+LLM) → текст → Edge TTS ──
 
   async processAudio(wavBuffer, callbacks = {}) {
-    // Этап 1: Локальный STT (Vosk)
-    if (callbacks.onStage) callbacks.onStage('stt');
-    let userText;
-    try {
-      userText = await this.localSTT.recognize(wavBuffer);
-    } catch (err) {
-      userText = '[ошибка распознавания: ' + err.message + ']';
-    }
-    if (!userText) userText = '[тишина]';
-    if (callbacks.onUserTranscript) callbacks.onUserTranscript(userText);
-
-    // Этап 2: LLM (текст → текст)
-    if (callbacks.onStage) callbacks.onStage('llm');
+    const base64Audio = wavBuffer.toString('base64');
     const historyMessages = this.history ? this.history.getApiMessages() : [];
+
+    // Этап 1: Отправляем аудио в Gemini (STT + LLM в одном вызове)
+    if (callbacks.onStage) callbacks.onStage('llm');
 
     const messages = [
       { role: 'system', content: this.systemPrompt },
       ...historyMessages,
-      { role: 'user', content: userText },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_audio',
+            input_audio: { data: base64Audio, format: 'wav' },
+          },
+        ],
+      },
     ];
 
     let responseText = '';
@@ -90,9 +82,13 @@ class AI {
       }
     }
 
+    if (callbacks.onUserTranscript) {
+      callbacks.onUserTranscript('[аудио]');
+    }
+
     const emotion = detectEmotion(responseText);
 
-    // Этап 3: Локальный TTS (Edge TTS)
+    // Этап 2: Озвучиваем ответ через Edge TTS (локально)
     if (callbacks.onStage) callbacks.onStage('tts');
     let audioData = Buffer.alloc(0);
     try {
@@ -103,14 +99,13 @@ class AI {
 
     // Сохранить в историю
     if (this.history) {
-      this.history.addExchange(userText, responseText, { emotion });
+      this.history.addExchange('[аудио-сообщение]', responseText, { emotion });
     }
 
     return {
       audioData,
       audioFormat: 'mp3',
       transcript: responseText,
-      userTranscript: userText,
       hasAudio: audioData.length > 0,
       emotion,
     };
