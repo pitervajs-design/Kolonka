@@ -41,7 +41,7 @@ class App extends EventEmitter {
 
     this.ai = new AI({
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.AI_MODEL || 'google/gemini-2.0-flash-lite-001',
+      model: process.env.AI_MODEL || 'mistralai/voxtral-small-24b-2507',
       systemPrompt: process.env.SYSTEM_PROMPT || undefined,
       ttsVoice: process.env.TTS_VOICE || 'ru-RU-DmitryNeural',
     });
@@ -148,7 +148,7 @@ class App extends EventEmitter {
     }
 
     this._log(`Режим аудио: ${this.activeMode}`);
-    this._log(`Модель: ${process.env.AI_MODEL || 'google/gemini-2.0-flash-lite-001'}`);
+    this._log(`Модель: ${process.env.AI_MODEL || 'mistralai/voxtral-small-24b-2507'}`);
     this._log(`Wake word: ${this.config.wakeWordEnabled ? 'Джарвис' : 'выключен'}`);
     this._log(`История: ${this.history.length} сообщений`);
 

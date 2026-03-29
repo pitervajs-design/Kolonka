@@ -16,6 +16,21 @@ function detectEmotion(text) {
   return 'neutral';
 }
 
+function parseStructuredResponse(text) {
+  const match = text.match(/^\[TRANSCRIPTION\]:\s*(.+?)(?:\n\n|\n)([\s\S]*)$/);
+  if (match) {
+    return {
+      userTranscript: match[1].trim(),
+      responseText: match[2].trim(),
+    };
+  }
+  // Fallback: no structured format found — treat entire text as response
+  return {
+    userTranscript: '',
+    responseText: text.trim(),
+  };
+}
+
 class AI {
   constructor(config) {
     this.client = new OpenAI({
@@ -27,10 +42,18 @@ class AI {
       },
     });
 
-    this.model = config.model || 'google/gemini-2.0-flash-lite-001';
-    this.systemPrompt = config.systemPrompt ||
+    this.model = config.model || 'mistralai/voxtral-small-24b-2507';
+    this.basePrompt = config.systemPrompt ||
       'Ты — умный голосовой помощник встроенный в колонку Divoom Timebox Evo. ' +
       'Отвечай кратко и по делу на русском языке. Ты дружелюбный и полезный.';
+    this.systemPrompt = this.basePrompt + '\n\n' +
+      'ВАЖНО: Ты получаешь аудио-сообщение от пользователя. ' +
+      'Твой ответ ОБЯЗАТЕЛЬНО должен начинаться со строки формата:\n' +
+      '[TRANSCRIPTION]: <точная транскрипция того, что сказал пользователь в аудио>\n' +
+      'Затем пустая строка, затем твой ответ.\n' +
+      'Пример:\n' +
+      '[TRANSCRIPTION]: Какая сегодня погода?\n\n' +
+      'Сейчас я не могу проверить погоду, но могу помочь с другими вопросами!';
 
     // Локальный TTS (Edge TTS)
     this.edgeTTS = new EdgeTTS({
@@ -78,34 +101,40 @@ class AI {
       const delta = chunk.choices?.[0]?.delta;
       if (delta?.content) {
         responseText += delta.content;
-        if (callbacks.onTranscript) callbacks.onTranscript(delta.content);
       }
     }
 
+    // Разбираем структурированный ответ
+    const parsed = parseStructuredResponse(responseText);
+
     if (callbacks.onUserTranscript) {
-      callbacks.onUserTranscript('[аудио]');
+      callbacks.onUserTranscript(parsed.userTranscript || '[аудио]');
+    }
+    if (callbacks.onTranscript) {
+      callbacks.onTranscript(parsed.responseText);
     }
 
-    const emotion = detectEmotion(responseText);
+    const emotion = detectEmotion(parsed.responseText);
 
     // Этап 2: Озвучиваем ответ через Edge TTS (локально)
     if (callbacks.onStage) callbacks.onStage('tts');
     let audioData = Buffer.alloc(0);
     try {
-      audioData = await this.edgeTTS.synthesize(responseText);
+      audioData = await this.edgeTTS.synthesize(parsed.responseText);
     } catch {
       // TTS ошибка — продолжаем с текстом
     }
 
     // Сохранить в историю
     if (this.history) {
-      this.history.addExchange('[аудио-сообщение]', responseText, { emotion });
+      this.history.addExchange(parsed.userTranscript || '[аудио-сообщение]', parsed.responseText, { emotion });
     }
 
     return {
       audioData,
       audioFormat: 'mp3',
-      transcript: responseText,
+      transcript: parsed.responseText,
+      userTranscript: parsed.userTranscript,
       hasAudio: audioData.length > 0,
       emotion,
     };
