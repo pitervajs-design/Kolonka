@@ -140,6 +140,60 @@ class AI {
     };
   }
 
+  // ── Текстовый запрос: текст → LLM → Edge TTS ──
+
+  async processText(text, callbacks = {}) {
+    const historyMessages = this.history ? this.history.getApiMessages() : [];
+
+    if (callbacks.onStage) callbacks.onStage('llm');
+
+    const messages = [
+      { role: 'system', content: this.basePrompt },
+      ...historyMessages,
+      { role: 'user', content: text },
+    ];
+
+    let responseText = '';
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.content) {
+        responseText += delta.content;
+      }
+    }
+
+    responseText = responseText.trim();
+    const emotion = detectEmotion(responseText);
+
+    // Озвучиваем через Edge TTS
+    if (callbacks.onStage) callbacks.onStage('tts');
+    let audioData = Buffer.alloc(0);
+    try {
+      audioData = await this.edgeTTS.synthesize(responseText);
+    } catch {
+      // TTS ошибка — продолжаем с текстом
+    }
+
+    // Сохранить в историю
+    if (this.history) {
+      this.history.addExchange(text, responseText, { emotion });
+    }
+
+    return {
+      audioData,
+      audioFormat: 'mp3',
+      transcript: responseText,
+      userTranscript: text,
+      hasAudio: audioData.length > 0,
+      emotion,
+    };
+  }
+
   clearHistory() {
     if (this.history) {
       this.history.clear();

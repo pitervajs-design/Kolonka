@@ -5,6 +5,20 @@ let mainWindow = null;
 let tray = null;
 let kolonkaApp = null;
 
+// Ограничение: только одна копия приложения
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // Не показывать в dock на macOS (Windows — аналогичное поведение через tray)
 if (process.platform === 'darwin') {
   app.dock.hide();
@@ -148,6 +162,10 @@ ipcMain.on('clear-history', () => {
   if (kolonkaApp) kolonkaApp.clearHistory();
 });
 
+ipcMain.on('send-text', (_, text) => {
+  if (kolonkaApp) kolonkaApp.sendText(text);
+});
+
 ipcMain.handle('get-mics', async () => {
   if (kolonkaApp) return kolonkaApp.getMicrophones();
   return [];
@@ -160,6 +178,16 @@ ipcMain.on('switch-mic', (_, deviceName) => {
 ipcMain.on('quit', () => {
   app.isQuitting = true;
   shutdown();
+});
+
+ipcMain.on('win-minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('win-maximize', () => {
+  if (mainWindow) {
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+  }
 });
 
 async function shutdown() {

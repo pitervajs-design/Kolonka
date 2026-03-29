@@ -243,6 +243,70 @@ class App extends EventEmitter {
     }
   }
 
+  // ── Текстовый ввод ──
+
+  async sendText(text) {
+    if (this.busy) return;
+    this.busy = true;
+
+    try {
+      await this._setState('processing');
+      this._log(`Вы: ${text}`);
+
+      // Команды
+      const parsed = this.commandParser.parse(text);
+      if (parsed.isCommand) {
+        await this._executeCommand(parsed);
+        await this._showIdleDisplay();
+        this.state = 'idle';
+        this.busy = false;
+        return;
+      }
+
+      this._log('[AI] Думаю...');
+
+      const result = await this.ai.processText(text, {
+        onStage: (stage) => {
+          const names = { llm: 'Думаю...', tts: 'Озвучивание...' };
+          this._log(`[AI] ${names[stage] || stage}`);
+        },
+      });
+
+      // Ответ AI
+      if (result.transcript) {
+        this._log(`AI: ${result.transcript}`);
+        this.emit('aiText', result.transcript);
+      }
+
+      if (result.emotion && result.emotion !== 'neutral') {
+        this.display.showEmotion(result.emotion, 2000).catch(() => {});
+      }
+
+      if (result.hasAudio && result.audioData.length > 0) {
+        await this._setState('speaking');
+        this._log('[>>>] Воспроизведение...');
+        if (result.audioFormat === 'mp3') {
+          await this.player.playMp3(result.audioData);
+        } else {
+          const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
+          await this.player.playPcm(result.audioData, sr);
+        }
+      } else if (result.transcript) {
+        this._log('(только текст, без аудио)');
+      } else {
+        this._log('(пустой ответ)');
+      }
+    } catch (err) {
+      this._error(`Ошибка: ${err.message}`);
+      await this._setState('error');
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    await this._showIdleDisplay();
+    this.state = 'idle';
+    this.busy = false;
+  }
+
   // ── Обработка аудио ──
 
   async _processAudioBuffer(wavBuffer, fromVAD) {

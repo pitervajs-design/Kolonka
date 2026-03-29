@@ -4,55 +4,124 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kolonka AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-icon" id="stateIcon">●</div>
-      <div class="header-text">
-        <h1>Kolonka AI</h1>
-        <span class="subtitle" id="stateLabel">Запуск...</span>
+  <div class="frame">
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="pixel-icon">
+          <div class="pixel-cube"></div>
+        </div>
+        <span class="topbar-title">KOLONKA AI</span>
+      </div>
+      <div class="topbar-right">
+        <button class="win-btn win-min" title="Minimize">_</button>
+        <button class="win-btn win-max" title="Maximize">[]</button>
+        <button class="win-btn win-close" title="Close">X</button>
       </div>
     </div>
+    <div class="topbar-accent"></div>
 
-    <!-- Chat -->
-    <div class="chat" id="chat">
-      <div class="chat-msg system">Инициализация...</div>
-    </div>
+    <div class="app">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-label">МЕНЮ</div>
 
-    <!-- Controls -->
-    <div class="controls">
-      <button class="btn btn-ptt" id="btnPtt" title="Push-to-Talk">
-        <span class="btn-icon">🎙</span>
-        <span class="btn-label">Запись</span>
-      </button>
+        <nav class="sidebar-nav">
+          <a class="nav-item active" data-page="chat">
+            <span class="nav-pixel-icon">&#9993;</span>
+            <span>ЧАТ</span>
+          </a>
+          <a class="nav-item" data-page="music">
+            <span class="nav-pixel-icon">&#9835;</span>
+            <span>МУЗЫКА</span>
+          </a>
+          <a class="nav-item" data-page="home">
+            <span class="nav-pixel-icon">&#8962;</span>
+            <span>УМНЫЙ ДОМ</span>
+          </a>
+          <a class="nav-item" data-page="alarms">
+            <span class="nav-pixel-icon">&#9200;</span>
+            <span>БУДИЛЬНИКИ</span>
+          </a>
+          <a class="nav-item" data-page="skills">
+            <span class="nav-pixel-icon">&#9889;</span>
+            <span>НАВЫКИ</span>
+          </a>
+          <a class="nav-item" data-page="settings">
+            <span class="nav-pixel-icon">&#9881;</span>
+            <span>НАСТРОЙКИ</span>
+          </a>
+        </nav>
 
-      <button class="btn btn-vad" id="btnVad" title="Автопрослушивание — колонка слушает постоянно и реагирует на 'Джарвис'">
-        <span class="btn-icon">📡</span>
-        <span class="btn-label">Авто</span>
-      </button>
+        <!-- Settings panel -->
+        <div class="settings-panel" id="settingsPanel" style="display:none;">
+          <div class="settings-group">
+            <label>МИКРОФОН</label>
+            <select id="micSelect"></select>
+          </div>
+          <div class="settings-group">
+            <button class="mc-btn settings-btn" id="btnVad">
+              <span id="vadLabel">VAD: ВЫКЛ</span>
+            </button>
+          </div>
+          <div class="settings-group">
+            <button class="mc-btn settings-btn" id="btnClear">
+              <span>ОЧИСТИТЬ</span>
+            </button>
+          </div>
+        </div>
 
-      <button class="btn btn-clear" id="btnClear" title="Очистить историю">
-        <span class="btn-icon">🗑</span>
-        <span class="btn-label">Очистить</span>
-      </button>
-    </div>
+        <!-- Sidebar footer -->
+        <div class="sidebar-footer">
+          <div class="pixel-speaker">
+            <div class="speaker-body">
+              <div class="speaker-cone"></div>
+            </div>
+          </div>
+          <div class="footer-info">
+            <div class="footer-name">KOLONKA AI</div>
+            <div class="footer-status">
+              <span class="status-dot" id="statusDot"></span>
+              <span id="statusText">ЗАПУСК</span>
+            </div>
+          </div>
+        </div>
+      </aside>
 
-    <!-- Microphone selector -->
-    <div class="mic-bar">
-      <label for="micSelect">Микрофон:</label>
-      <select id="micSelect"></select>
-    </div>
+      <!-- Main content -->
+      <main class="main">
+        <div class="chat-header">
+          <span class="chat-header-deco">[</span>
+          <span>ЧАТ С KOLONKA AI</span>
+          <span class="chat-header-deco">]</span>
+        </div>
 
-    <!-- Status bar -->
-    <div class="statusbar">
-      <span id="modeLabel">PTT</span>
-      <span id="statusInfo">—</span>
-      <span id="versionLabel">v2.0.0</span>
+        <div class="chat" id="chat">
+          <div class="chat-msg system">Инициализация...</div>
+        </div>
+
+        <!-- Bottom input bar -->
+        <div class="input-bar">
+          <button class="mc-btn mic-btn" id="btnPtt" title="Push-to-Talk (Space)">
+            <span class="mic-icon">&#127908;</span>
+          </button>
+          <input type="text" class="input-field" id="textInput" placeholder="Напишите сообщение..." autocomplete="off">
+          <button class="mc-btn send-btn" id="sendBtn">ОТПРАВИТЬ</button>
+        </div>
+      </main>
     </div>
   </div>
+
+  <span id="modeLabel" style="display:none">PTT</span>
+  <span id="statusInfo" style="display:none"></span>
+  <span id="versionLabel" style="display:none"></span>
+  <span id="stateLabel" style="display:none"></span>
 
   <script src="renderer.js"></script>
 </body>
