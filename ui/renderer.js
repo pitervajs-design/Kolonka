@@ -9,6 +9,13 @@ const btnClear = document.getElementById('btnClear');
 const modeLabel = document.getElementById('modeLabel');
 const statusInfo = document.getElementById('statusInfo');
 const micSelect = document.getElementById('micSelect');
+const versionLabel = document.getElementById('versionLabel');
+
+// Показать версию из package.json
+try {
+  const pkg = require('../package.json');
+  versionLabel.textContent = `v${pkg.version}`;
+} catch {}
 
 let isRecording = false;
 let vadActive = false;

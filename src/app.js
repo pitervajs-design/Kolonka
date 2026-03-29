@@ -22,7 +22,6 @@ class App extends EventEmitter {
 
     this.config = {
       audioMode: process.env.AUDIO_MODE || 'timebox',
-      aiMode: process.env.AI_MODE || 'audio',
       idleDisplay: process.env.IDLE_DISPLAY || 'icon',
       wakeWordEnabled: (process.env.WAKE_WORD || 'true') !== 'false',
       vadThreshold: parseInt(process.env.VAD_THRESHOLD) || 500,
@@ -42,16 +41,11 @@ class App extends EventEmitter {
 
     this.ai = new AI({
       apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.AI_MODEL || 'openai/gpt-4o-audio-preview',
-      voice: process.env.AI_VOICE || 'nova',
+      model: process.env.AI_MODEL || 'x-ai/grok-4.1-fast',
       systemPrompt: process.env.SYSTEM_PROMPT || undefined,
-      playbackSampleRate: parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000,
-      aiMode: this.config.aiMode,
-      llmModel: process.env.LLM_MODEL || 'openai/gpt-4o',
-      useLocalSTT: (process.env.LOCAL_STT || 'true') !== 'false',
-      localSTTSampleRate: parseInt(process.env.RECORD_SAMPLE_RATE) || 16000,
-      localSTTModelPath: process.env.VOSK_MODEL_PATH || undefined,
       ttsVoice: process.env.TTS_VOICE || 'ru-RU-DmitryNeural',
+      sttSampleRate: parseInt(process.env.RECORD_SAMPLE_RATE) || 16000,
+      sttModelPath: process.env.VOSK_MODEL_PATH || undefined,
     });
 
     this.display = new Display({
@@ -156,8 +150,7 @@ class App extends EventEmitter {
     }
 
     this._log(`Режим аудио: ${this.activeMode}`);
-    this._log(`Режим AI: ${this.config.aiMode}`);
-    this._log(`Модель: ${process.env.AI_MODEL || 'openai/gpt-4o-audio-preview'}`);
+    this._log(`Модель: ${process.env.AI_MODEL || 'x-ai/grok-4.1-fast'}`);
     this._log(`Wake word: ${this.config.wakeWordEnabled ? 'Джарвис' : 'выключен'}`);
     this._log(`История: ${this.history.length} сообщений`);
 
