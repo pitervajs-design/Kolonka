@@ -12,8 +12,6 @@ const versionLabel = document.getElementById('versionLabel');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const vadLabel = document.getElementById('vadLabel');
-const settingsPanel = document.getElementById('settingsPanel');
-const skillsPanel = document.getElementById('skillsPanel');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 
@@ -44,14 +42,18 @@ const STATE_STATUS = {
 
 // ── Навигация сайдбара ──
 
+const allPages = document.querySelectorAll('.page-panel');
+
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
     const page = item.dataset.page;
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
 
-    settingsPanel.style.display = page === 'settings' ? 'block' : 'none';
-    skillsPanel.style.display = page === 'skills' ? 'block' : 'none';
+    // Показать нужную панель, скрыть остальные
+    allPages.forEach(p => {
+      p.style.display = p.id === `page-${page}` ? 'flex' : 'none';
+    });
   });
 });
 
@@ -135,6 +137,7 @@ ipcRenderer.on('ready', () => {
   statusDot.className = 'status-dot online';
   statusText.textContent = 'ОНЛАЙН';
   loadMicrophones();
+  loadAlarms();
 });
 
 // ── Микрофоны ──
@@ -157,6 +160,74 @@ micSelect.addEventListener('change', () => {
 
 ipcRenderer.on('micChanged', (_, name) => {
   micSelect.value = name;
+});
+
+// ── Будильники ──
+
+const alarmsList = document.getElementById('alarmsList');
+const alarmsEmpty = document.getElementById('alarmsEmpty');
+const alarmHour = document.getElementById('alarmHour');
+const alarmMinute = document.getElementById('alarmMinute');
+const btnAddAlarm = document.getElementById('btnAddAlarm');
+
+async function loadAlarms() {
+  const alarms = await ipcRenderer.invoke('get-alarms');
+  renderAlarms(alarms);
+}
+
+function renderAlarms(alarms) {
+  // Удалить старые карточки (оставить alarmsEmpty)
+  alarmsList.querySelectorAll('.alarm-card').forEach(c => c.remove());
+
+  const active = alarms.filter(a => a.enabled);
+
+  if (active.length === 0) {
+    alarmsEmpty.style.display = 'block';
+    return;
+  }
+
+  alarmsEmpty.style.display = 'none';
+
+  for (const alarm of active) {
+    const card = document.createElement('div');
+    card.className = 'alarm-card';
+
+    const timeStr = String(alarm.hour).padStart(2, '0') + ':' + String(alarm.minute).padStart(2, '0');
+
+    card.innerHTML =
+      '<div class="alarm-card-left">' +
+        '<span class="alarm-card-icon">&#9200;</span>' +
+        '<div>' +
+          '<div class="alarm-card-time">' + timeStr + '</div>' +
+          '<div class="alarm-card-slot">СЛОТ #' + (alarm.slot + 1) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<button class="mc-btn alarm-del-btn" data-slot="' + alarm.slot + '" title="Удалить">X</button>';
+
+    card.querySelector('.alarm-del-btn').addEventListener('click', () => {
+      ipcRenderer.send('remove-alarm', alarm.slot);
+    });
+
+    alarmsList.appendChild(card);
+  }
+}
+
+ipcRenderer.on('alarmsUpdate', (_, alarms) => {
+  renderAlarms(alarms);
+});
+
+btnAddAlarm.addEventListener('click', () => {
+  const hour = parseInt(alarmHour.value) || 0;
+  const minute = parseInt(alarmMinute.value) || 0;
+  ipcRenderer.send('add-alarm', { hour, minute });
+});
+
+// Enter в полях ввода будильника
+alarmHour.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter') btnAddAlarm.click();
+});
+alarmMinute.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter') btnAddAlarm.click();
 });
 
 // ── Кнопки ──

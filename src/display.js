@@ -268,6 +268,169 @@ class Display {
     } catch {}
   }
 
+  // ── Будильник ──
+
+  // Установить будильник
+  // slot: 0-2 (номер будильника), hour: 0-23, minute: 0-59
+  // weekdays: массив булевых [пн,вт,ср,чт,пт,сб,вс] или null (одноразовый)
+  async setAlarm(slot, hour, minute, weekdays = null) {
+    if (!this.connected || !this.timebox) return;
+
+    try {
+      const d = this.timebox.createRequest('raw');
+
+      let weekbits = 0;
+      if (weekdays) {
+        for (let i = 0; i < 7 && i < weekdays.length; i++) {
+          if (weekdays[i]) weekbits += (1 << i);
+        }
+      } else {
+        // Одноразовый — включаем все дни чтобы сработал
+        weekbits = 0x7F; // 1111111
+      }
+
+      const payload =
+        '43' +                    // команда будильника
+        this._toHex(slot) +       // слот (0-2)
+        '01' +                    // включён
+        this._toHex(hour) +       // час
+        this._toHex(minute) +     // минута
+        this._toHex(weekbits) +   // дни недели (битовая маска)
+        '01' +                    // режим будильника (1 = встроенный рингтон)
+        '00' +                    // режим триггера
+        '00' + '00' +             // рингтон ID (0 = стандартный)
+        '64';                     // громкость (100)
+
+      d.push(payload);
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
+  // Отключить все будильники (слоты 0-2)
+  async clearAlarms() {
+    if (!this.connected || !this.timebox) return;
+
+    try {
+      for (let slot = 0; slot < 3; slot++) {
+        await this.clearAlarmSlot(slot);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    } catch {}
+  }
+
+  // Отключить конкретный будильник
+  async clearAlarmSlot(slot) {
+    if (!this.connected || !this.timebox) return;
+
+    try {
+      const d = this.timebox.createRequest('raw');
+      const payload =
+        '43' +
+        this._toHex(slot) +
+        '00' +    // выключен
+        '00' +    // час
+        '00' +    // минута
+        '00' +    // дни недели
+        '00' +    // режим
+        '00' +    // триггер
+        '00' + '00' +  // частота
+        '00';     // громкость
+
+      d.push(payload);
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
+  // ── Таймер (обратный отсчёт) ──
+
+  // Запустить таймер: minutes (0-99), seconds (0-59)
+  async startCountdown(minutes, seconds) {
+    if (!this.connected || !this.timebox) return;
+    try {
+      const d = this.timebox.createRequest('raw');
+      const payload =
+        '72' +                    // инструмент
+        '03' +                    // обратный отсчёт
+        '01' +                    // включить
+        this._toHex(minutes) +    // минуты
+        this._toHex(seconds);     // секунды
+      d.push(payload);
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
+  // Остановить таймер
+  async stopCountdown() {
+    if (!this.connected || !this.timebox) return;
+    try {
+      const d = this.timebox.createRequest('raw');
+      d.push('72' + '03' + '00' + '00' + '00');
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
+  // ── Громкость ──
+
+  // Установить громкость (0-100)
+  async setVolume(level) {
+    if (!this.connected || !this.timebox) return;
+    try {
+      const d = this.timebox.createRequest('raw');
+      // Протокол: громкость 0-15 (маппинг из 0-100)
+      const vol = Math.round(Math.min(100, Math.max(0, level)) * 15 / 100);
+      d.push('08' + this._toHex(vol));
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
+  // ── Радио (FM) ──
+
+  // Включить радио на частоте (например 101.7)
+  async radioOn(frequency) {
+    if (!this.connected || !this.timebox) return;
+    try {
+      // Включаем радио
+      const d1 = this.timebox.createRequest('raw');
+      d1.push('05' + '01');
+      const buf1 = d1.messages.asBinaryBuffer();
+      await this._sendBuffers(buf1);
+
+      // Устанавливаем частоту
+      if (frequency > 0) {
+        await new Promise(r => setTimeout(r, 50));
+        const d2 = this.timebox.createRequest('raw');
+        const freq = Math.round(frequency * 10);
+        let lo, hi;
+        if (freq > 1000) {
+          lo = (freq - 1000) & 0xFF;
+          hi = Math.floor(freq / 100) & 0xFF;
+        } else {
+          lo = (freq % 100) & 0xFF;
+          hi = Math.floor(freq / 100) & 0xFF;
+        }
+        d2.push('61' + this._toHex(lo) + this._toHex(hi));
+        const buf2 = d2.messages.asBinaryBuffer();
+        await this._sendBuffers(buf2);
+      }
+    } catch {}
+  }
+
+  // Выключить радио
+  async radioOff() {
+    if (!this.connected || !this.timebox) return;
+    try {
+      const d = this.timebox.createRequest('raw');
+      d.push('05' + '00');
+      const buffers = d.messages.asBinaryBuffer();
+      await this._sendBuffers(buffers);
+    } catch {}
+  }
+
   static async listPorts() {
     if (!SerialPortModule) return [];
     try {

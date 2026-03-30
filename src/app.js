@@ -56,6 +56,13 @@ class App extends EventEmitter {
       maxMessages: parseInt(process.env.MAX_HISTORY) || 50,
     });
 
+    // Список будильников (3 слота)
+    this.alarms = [
+      { slot: 0, enabled: false, hour: 0, minute: 0 },
+      { slot: 1, enabled: false, hour: 0, minute: 0 },
+      { slot: 2, enabled: false, hour: 0, minute: 0 },
+    ];
+
     this.ai.setHistory(this.history);
   }
 
@@ -300,29 +307,7 @@ class App extends EventEmitter {
         this.emit('aiText', result.transcript);
       }
 
-      if (result.emotion && result.emotion !== 'neutral') {
-        this.display.showEmotion(result.emotion, 0).catch(() => {});
-      }
-
-      if (result.hasAudio && result.audioData.length > 0) {
-        await this._setState('speaking');
-        this._log('[>>>] Воспроизведение...');
-        this._pauseVAD();
-        try {
-          if (result.audioFormat === 'mp3') {
-            await this.player.playMp3(result.audioData);
-          } else {
-            const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
-            await this.player.playPcm(result.audioData, sr);
-          }
-        } finally {
-          await this._resumeVAD();
-        }
-      } else if (result.transcript) {
-        this._log('(только текст, без аудио)');
-      } else {
-        this._log('(пустой ответ)');
-      }
+      await this._playAIResponse(result);
     } catch (err) {
       this._error(`Ошибка: ${err.message}`);
       await this._setState('error');
@@ -387,29 +372,7 @@ class App extends EventEmitter {
         this.emit('aiText', result.transcript);
       }
 
-      if (result.emotion && result.emotion !== 'neutral') {
-        this.display.showEmotion(result.emotion, 0).catch(() => {});
-      }
-
-      if (result.hasAudio && result.audioData.length > 0) {
-        await this._setState('speaking');
-        this._log('[>>>] Воспроизведение...');
-        this._pauseVAD();
-        try {
-          if (result.audioFormat === 'mp3') {
-            await this.player.playMp3(result.audioData);
-          } else {
-            const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
-            await this.player.playPcm(result.audioData, sr);
-          }
-        } finally {
-          await this._resumeVAD();
-        }
-      } else if (result.transcript) {
-        this._log('(только текст, без аудио)');
-      } else {
-        this._log('(пустой ответ)');
-      }
+      await this._playAIResponse(result);
     } catch (err) {
       this._error(`Ошибка: ${err.message}`);
       await this._setState('error');
@@ -421,6 +384,43 @@ class App extends EventEmitter {
     this.busy = false;
   }
 
+  // ── Воспроизведение ответа AI с эмоцией ──
+
+  async _playAIResponse(result) {
+    const hasEmotion = result.emotion && result.emotion !== 'neutral';
+
+    if (result.hasAudio && result.audioData.length > 0) {
+      await this._setState('speaking');
+
+      // Показать эмоцию ПОВЕРХ speaking-анимации (перезаписывает speaking face)
+      if (hasEmotion) {
+        this._log(`[EMO] ${result.emotion} (во время воспроизведения)`);
+        await this.display.showEmotion(result.emotion, 0);
+      }
+
+      this._log('[>>>] Воспроизведение...');
+      this._pauseVAD();
+      try {
+        if (result.audioFormat === 'mp3') {
+          await this.player.playMp3(result.audioData);
+        } else {
+          const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
+          await this.player.playPcm(result.audioData, sr);
+        }
+      } finally {
+        await this._resumeVAD();
+      }
+    } else if (hasEmotion) {
+      // Нет аудио, но есть эмоция — показать на 3 секунды
+      this._log(`[EMO] ${result.emotion}`);
+      await this.display.showEmotion(result.emotion, 3000);
+    } else if (result.transcript) {
+      this._log('(только текст, без аудио)');
+    } else {
+      this._log('(пустой ответ)');
+    }
+  }
+
   async _executeCommand(parsed) {
     this._log(`[CMD] ${parsed.command.description}`);
     switch (parsed.handler) {
@@ -428,6 +428,59 @@ class App extends EventEmitter {
       case 'setBrightness': await this.display.setBrightness(parsed.params.level); break;
       case 'showVjEffect':  await this.display.showVjEffect(parsed.params.effectId); break;
       case 'showText':      await this.display.showText(parsed.params.text); break;
+      case 'showEmotion':   await this.display.showEmotion(parsed.params.emotion, 0); break;
+      case 'setAlarm':
+        const h = Math.min(23, Math.max(0, parsed.params.hour));
+        const m = Math.min(59, Math.max(0, parsed.params.minute));
+        {
+          // Найти свободный слот или использовать первый
+          let slot = this.alarms.findIndex(a => !a.enabled);
+          if (slot === -1) slot = 0;
+          await this.display.setAlarm(slot, h, m);
+          await this.display.setVolume(80);
+          this.alarms[slot] = { slot, enabled: true, hour: h, minute: m };
+          this.emit('alarmsUpdate', this.alarms);
+          this._log(`Будильник установлен на ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+          this.emit('aiText', `Будильник установлен на ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+        }
+        break;
+      case 'clearAlarms':
+        await this.display.clearAlarms();
+        this.alarms = this.alarms.map((a, i) => ({ slot: i, enabled: false, hour: 0, minute: 0 }));
+        this.emit('alarmsUpdate', this.alarms);
+        this._log('Все будильники отключены');
+        this.emit('aiText', 'Все будильники отключены');
+        break;
+      case 'setTimer':
+        await this.display.startCountdown(parsed.params.minutes, parsed.params.seconds);
+        {
+          const label = parsed.params.minutes > 0
+            ? `${parsed.params.minutes} мин` + (parsed.params.seconds > 0 ? ` ${parsed.params.seconds} сек` : '')
+            : `${parsed.params.seconds} сек`;
+          this._log(`Таймер установлен на ${label}`);
+          this.emit('aiText', `Таймер установлен на ${label}`);
+        }
+        break;
+      case 'stopTimer':
+        await this.display.stopCountdown();
+        this._log('Таймер остановлен');
+        this.emit('aiText', 'Таймер остановлен');
+        break;
+      case 'setVolume':
+        await this.display.setVolume(parsed.params.level);
+        this._log(`Громкость: ${parsed.params.level}%`);
+        this.emit('aiText', `Громкость: ${parsed.params.level}%`);
+        break;
+      case 'radioOn':
+        await this.display.radioOn(parsed.params.frequency);
+        this._log(`Радио включено: ${parsed.params.frequency} FM`);
+        this.emit('aiText', `Радио включено: ${parsed.params.frequency} FM`);
+        break;
+      case 'radioOff':
+        await this.display.radioOff();
+        this._log('Радио выключено');
+        this.emit('aiText', 'Радио выключено');
+        break;
       case 'clearHistory':  this.ai.clearHistory(); break;
       case 'stop':          this.player.stop(); await this._showIdleDisplay(); break;
     }
@@ -436,6 +489,28 @@ class App extends EventEmitter {
   clearHistory() {
     this.ai.clearHistory();
     this._log('История очищена');
+  }
+
+  // ── Будильники (из UI) ──
+
+  async addAlarmFromUI(hour, minute) {
+    let slot = this.alarms.findIndex(a => !a.enabled);
+    if (slot === -1) slot = 0;
+    const h = Math.min(23, Math.max(0, hour));
+    const m = Math.min(59, Math.max(0, minute));
+    await this.display.setAlarm(slot, h, m);
+    await this.display.setVolume(80);
+    this.alarms[slot] = { slot, enabled: true, hour: h, minute: m };
+    this.emit('alarmsUpdate', this.alarms);
+    this._log(`Будильник установлен на ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  }
+
+  async removeAlarmFromUI(slot) {
+    if (slot < 0 || slot > 2) return;
+    await this.display.clearAlarmSlot(slot);
+    this.alarms[slot] = { slot, enabled: false, hour: 0, minute: 0 };
+    this.emit('alarmsUpdate', this.alarms);
+    this._log(`Будильник #${slot + 1} удалён`);
   }
 
   // ── Микрофоны ──

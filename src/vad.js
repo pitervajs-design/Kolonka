@@ -19,7 +19,7 @@ class VAD extends EventEmitter {
     super();
     this.device = config.device || null;
     this.sampleRate = config.sampleRate || 16000;
-    this.threshold = config.threshold || 500;       // порог амплитуды (0-32767)
+    this.threshold = config.threshold || 200;       // порог амплитуды (0-32767)
     this.silenceMs = config.silenceMs || 1500;       // мс тишины для окончания фразы
     this.minSpeechMs = config.minSpeechMs || 300;    // мин. длительность речи
     this.maxSpeechMs = config.maxSpeechMs || 15000;  // макс. длительность фразы
@@ -36,6 +36,12 @@ class VAD extends EventEmitter {
     this._chunks = [];
     this._prefixBuffer = [];  // кольцевой буфер для prefix
     this._prefixBytes = Math.floor(this.sampleRate * 2 * (this.prefixMs / 1000));
+
+    // Диагностика
+    this._rmsLogInterval = null;
+    this._lastRms = 0;
+    this._maxRms = 0;
+    this._chunkCount = 0;
   }
 
   // Запустить VAD-прослушивание
@@ -67,37 +73,61 @@ class VAD extends EventEmitter {
     });
 
     this._process.stdout.on('data', (chunk) => {
+      this._chunkCount++;
+      // Первые 3 чанка — лог сырых данных для диагностики
+      if (this._chunkCount <= 3) {
+        const hex = chunk.slice(0, 20).toString('hex');
+        const nonZero = chunk.filter(b => b !== 0).length;
+        this.emit('debug', `[VAD-RAW] chunk#${this._chunkCount} size=${chunk.length} nonZero=${nonZero}/${chunk.length} hex=${hex}`);
+      }
       this._analyzeChunk(chunk);
+    });
+
+    this._process.stderr.on('data', (data) => {
+      const msg = data.toString().trim();
+      if (msg && !msg.startsWith('size=') && !msg.includes('Press [q]')) {
+        this.emit('debug', `[FFmpeg] ${msg}`);
+      }
     });
 
     this._process.on('error', (err) => {
       this._active = false;
+      this._stopDiagnostics();
       this.emit('error', err);
     });
 
-    this._process.on('close', () => {
+    this._process.on('close', (code) => {
       this._active = false;
+      this._stopDiagnostics();
       // Если была речь — финализируем
       if (this._speaking && this._chunks.length > 0) {
         this._finalizeSpeech();
       }
     });
 
-    this.emit('started');
+    // Периодический лог RMS для диагностики (каждые 5 сек)
+    this._startDiagnostics();
+
+    this.emit('started', { device: deviceName, threshold: this.threshold });
   }
 
   // Анализ PCM-чанка
   _analyzeChunk(chunk) {
     if (!this._active) return;
 
-    // Вычисляем RMS амплитуду
-    const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.length >> 1);
+    // Копируем буфер чтобы избежать проблем с Buffer pool alignment
+    const buf = Buffer.from(chunk);
+    const samples = new Int16Array(buf.buffer, buf.byteOffset, buf.length >> 1);
     let sum = 0;
     for (let i = 0; i < samples.length; i++) {
       sum += samples[i] * samples[i];
     }
     const rms = Math.sqrt(sum / samples.length);
     const now = Date.now();
+
+    // Трекинг RMS для диагностики
+    this._lastRms = rms;
+    if (rms > this._maxRms) this._maxRms = rms;
 
     if (rms > this.threshold) {
       // Обнаружена речь
@@ -199,9 +229,27 @@ class VAD extends EventEmitter {
     return Buffer.concat([header, pcmData]);
   }
 
+  _startDiagnostics() {
+    this._maxRms = 0;
+    this._chunkCount = 0;
+    this._rmsLogInterval = setInterval(() => {
+      this.emit('debug', `[VAD-RMS] last=${Math.round(this._lastRms)} max=${Math.round(this._maxRms)} threshold=${this.threshold} chunks=${this._chunkCount} speaking=${this._speaking}`);
+      this._maxRms = 0;
+      this._chunkCount = 0;
+    }, 5000);
+  }
+
+  _stopDiagnostics() {
+    if (this._rmsLogInterval) {
+      clearInterval(this._rmsLogInterval);
+      this._rmsLogInterval = null;
+    }
+  }
+
   // Остановить VAD
   stop() {
     this._active = false;
+    this._stopDiagnostics();
     if (this._process) {
       try { this._process.stdin.write('q'); } catch {}
       setTimeout(() => {

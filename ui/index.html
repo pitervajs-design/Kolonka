@@ -60,32 +60,6 @@
           </a>
         </nav>
 
-        <!-- Skills panel -->
-        <div class="settings-panel" id="skillsPanel" style="display:none;">
-          <div class="skill-item">
-            <div class="skill-name">ЭМОЦИИ</div>
-            <div class="skill-desc">Если в тексте есть слова "злой" или злой/грустный смайлик, лицо агента меняется на злое во время ответа</div>
-          </div>
-        </div>
-
-        <!-- Settings panel -->
-        <div class="settings-panel" id="settingsPanel" style="display:none;">
-          <div class="settings-group">
-            <label>МИКРОФОН</label>
-            <select id="micSelect"></select>
-          </div>
-          <div class="settings-group">
-            <button class="mc-btn settings-btn" id="btnVad">
-              <span id="vadLabel">VAD: ВЫКЛ</span>
-            </button>
-          </div>
-          <div class="settings-group">
-            <button class="mc-btn settings-btn" id="btnClear">
-              <span>ОЧИСТИТЬ</span>
-            </button>
-          </div>
-        </div>
-
         <!-- Sidebar footer -->
         <div class="sidebar-footer">
           <div class="pixel-speaker">
@@ -105,23 +79,139 @@
 
       <!-- Main content -->
       <main class="main">
-        <div class="chat-header">
-          <span class="chat-header-deco">[</span>
-          <span>ЧАТ С KOLONKA AI</span>
-          <span class="chat-header-deco">]</span>
+        <!-- ═══ ЧАТ ═══ -->
+        <div class="page-panel" id="page-chat">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>ЧАТ С KOLONKA AI</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+
+          <div class="chat" id="chat">
+            <div class="chat-msg system">Инициализация...</div>
+          </div>
+
+          <!-- Bottom input bar -->
+          <div class="input-bar">
+            <button class="mc-btn mic-btn" id="btnPtt" title="Push-to-Talk (Space)">
+              <span class="mic-icon">&#127908;</span>
+            </button>
+            <input type="text" class="input-field" id="textInput" placeholder="Напишите сообщение..." autocomplete="off">
+            <button class="mc-btn send-btn" id="sendBtn">ОТПРАВИТЬ</button>
+          </div>
         </div>
 
-        <div class="chat" id="chat">
-          <div class="chat-msg system">Инициализация...</div>
+        <!-- ═══ МУЗЫКА ═══ -->
+        <div class="page-panel" id="page-music" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>МУЗЫКА</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+          <div class="page-content">
+            <div class="page-placeholder">
+              <div class="placeholder-icon">&#9835;</div>
+              <div class="placeholder-title">МУЗЫКА</div>
+              <div class="placeholder-desc">Управление музыкой на колонке Timebox Evo. Воспроизведение, пауза, переключение треков.</div>
+              <div class="placeholder-status">В РАЗРАБОТКЕ</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Bottom input bar -->
-        <div class="input-bar">
-          <button class="mc-btn mic-btn" id="btnPtt" title="Push-to-Talk (Space)">
-            <span class="mic-icon">&#127908;</span>
-          </button>
-          <input type="text" class="input-field" id="textInput" placeholder="Напишите сообщение..." autocomplete="off">
-          <button class="mc-btn send-btn" id="sendBtn">ОТПРАВИТЬ</button>
+        <!-- ═══ УМНЫЙ ДОМ ═══ -->
+        <div class="page-panel" id="page-home" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>УМНЫЙ ДОМ</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+          <div class="page-content">
+            <div class="page-placeholder">
+              <div class="placeholder-icon">&#8962;</div>
+              <div class="placeholder-title">УМНЫЙ ДОМ</div>
+              <div class="placeholder-desc">Управление устройствами умного дома через голосовые команды и интерфейс.</div>
+              <div class="placeholder-status">В РАЗРАБОТКЕ</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ БУДИЛЬНИКИ ═══ -->
+        <div class="page-panel" id="page-alarms" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>БУДИЛЬНИКИ</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+          <div class="page-content">
+            <div class="alarms-container">
+              <div class="alarms-list" id="alarmsList">
+                <div class="alarm-empty" id="alarmsEmpty">Нет установленных будильников</div>
+              </div>
+              <div class="alarm-add-form">
+                <label class="alarm-add-label">НОВЫЙ БУДИЛЬНИК</label>
+                <div class="alarm-add-row">
+                  <input type="number" id="alarmHour" class="alarm-time-input" min="0" max="23" value="7" placeholder="ЧЧ">
+                  <span class="alarm-time-sep">:</span>
+                  <input type="number" id="alarmMinute" class="alarm-time-input" min="0" max="59" value="00" placeholder="ММ">
+                  <button class="mc-btn alarm-add-btn" id="btnAddAlarm">ДОБАВИТЬ</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ НАВЫКИ ═══ -->
+        <div class="page-panel" id="page-skills" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>НАВЫКИ</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+          <div class="page-content">
+            <div class="skills-list">
+              <div class="skill-card">
+                <div class="skill-card-name">ЭМОЦИИ</div>
+                <div class="skill-card-desc">Если в тексте ответа есть слова "злой" или злой/грустный смайлик, лицо агента на экране Timebox меняется на злое во время ответа.</div>
+              </div>
+              <div class="skill-card">
+                <div class="skill-card-name">ГОЛОСОВОЕ УПРАВЛЕНИЕ</div>
+                <div class="skill-card-desc">Скажите "Джарвис", "Колонка" или "Агент" для активации голосового помощника. Поддержка непрерывного диалога.</div>
+              </div>
+              <div class="skill-card">
+                <div class="skill-card-name">РАСПОЗНАВАНИЕ РЕЧИ</div>
+                <div class="skill-card-desc">Автоматическая транскрипция речи с помощью Mistral Voxtral. Определение конца фразы по тишине.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ НАСТРОЙКИ ═══ -->
+        <div class="page-panel" id="page-settings" style="display:none;">
+          <div class="chat-header">
+            <span class="chat-header-deco">[</span>
+            <span>НАСТРОЙКИ</span>
+            <span class="chat-header-deco">]</span>
+          </div>
+          <div class="page-content">
+            <div class="settings-list">
+              <div class="settings-group-main">
+                <label>МИКРОФОН</label>
+                <select id="micSelect"></select>
+              </div>
+              <div class="settings-group-main">
+                <label>РЕЖИМ ЗАПИСИ</label>
+                <button class="mc-btn settings-btn-main" id="btnVad">
+                  <span id="vadLabel">VAD: ВЫКЛ</span>
+                </button>
+              </div>
+              <div class="settings-group-main">
+                <label>ИСТОРИЯ</label>
+                <button class="mc-btn settings-btn-main" id="btnClear">
+                  <span>ОЧИСТИТЬ ИСТОРИЮ</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>

@@ -150,6 +150,12 @@ async function startApp() {
     }
   });
 
+  kolonkaApp.on('alarmsUpdate', (alarms) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('alarmsUpdate', alarms);
+    }
+  });
+
   await kolonkaApp.start();
 }
 
@@ -181,6 +187,19 @@ ipcMain.handle('get-mics', async () => {
 
 ipcMain.on('switch-mic', (_, deviceName) => {
   if (kolonkaApp) kolonkaApp.switchMicrophone(deviceName);
+});
+
+ipcMain.handle('get-alarms', () => {
+  if (kolonkaApp) return kolonkaApp.alarms;
+  return [];
+});
+
+ipcMain.on('add-alarm', (_, { hour, minute }) => {
+  if (kolonkaApp) kolonkaApp.addAlarmFromUI(hour, minute);
+});
+
+ipcMain.on('remove-alarm', (_, slot) => {
+  if (kolonkaApp) kolonkaApp.removeAlarmFromUI(slot);
 });
 
 // VAD из renderer (Web Audio API)
