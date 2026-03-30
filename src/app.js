@@ -6,7 +6,6 @@ const Player = require('./player');
 const AI = require('./ai');
 const Display = require('./display');
 const History = require('./history');
-const VAD = require('./vad');
 const CommandParser = require('./commands');
 const Logger = require('./logger');
 
@@ -16,14 +15,10 @@ class App extends EventEmitter {
     this.state = 'idle';
     this.busy = false;
     this.vadMode = false;
-    this.vad = null;
+    this._vadAvailable = false;
+    this._vadConfig = {};
     this.activeMode = 'pc';
     this.logger = new Logger();
-
-    // Conversation state for VAD mode
-    this.conversationState = 'waiting'; // 'waiting' | 'active'
-    this._activeListeningTimer = null;
-    this._activeListeningMs = parseInt(process.env.ACTIVE_LISTENING_MS) || 10000;
 
     this.config = {
       audioMode: process.env.AUDIO_MODE || 'timebox',
@@ -147,10 +142,8 @@ class App extends EventEmitter {
       }
     }
 
-    // VAD
-    if (recDeviceName) {
-      this._setupVAD(recDeviceName, recSampleRate);
-    }
+    // VAD (Web Audio в renderer)
+    this._setupVAD();
 
     this._log(`Режим аудио: ${this.activeMode}`);
     this._log(`Модель: ${process.env.AI_MODEL || 'mistralai/voxtral-small-24b-2507'}`);
@@ -161,55 +154,46 @@ class App extends EventEmitter {
     this.emit('ready');
 
     // Автозапуск VAD
-    if (this.vad && this.config.wakeWordEnabled) {
+    if (this._vadAvailable) {
       this.vadMode = true;
-      this.conversationState = 'waiting';
-      this._log('[VAD] Автозапуск — слушаю wake word...');
-      this.vad.start().catch(err => {
-        this._error(`[VAD] Ошибка автозапуска: ${err.message}`);
-        this.vadMode = false;
-      });
+      this._log('[VAD] Автозапуск — слушаю микрофон (Web Audio)...');
+      this.emit('vadControl', { action: 'start', config: this._vadConfig });
       this.emit('vadMode', true);
     }
 
     return true;
   }
 
-  // ── VAD ──
+  // ── VAD (Web Audio в renderer) ──
 
-  _setupVAD(deviceName, sampleRate) {
-    this.vad = new VAD({
-      device: deviceName,
-      sampleRate: sampleRate || 16000,
+  _setupVAD() {
+    // VAD теперь работает через Web Audio API в renderer процессе
+    // Здесь только сохраняем конфиг и помечаем что VAD доступен
+    this._vadAvailable = true;
+    this._vadConfig = {
       threshold: this.config.vadThreshold,
       silenceMs: this.config.vadSilenceMs,
-    });
+      sampleRate: 16000,
+    };
+  }
 
-    this.vad.on('speechStart', () => {
-      if (this.busy) return;
-      this._log('[VAD] Речь обнаружена...');
-      this._setState('listening').catch(() => {});
-    });
+  // Вызывается из electron-main.js при получении речи от renderer
+  handleVADSpeech(wavBuffer) {
+    if (this.busy) return;
+    this._log(`[VAD] Фраза записана (${Math.round(wavBuffer.length / 1024)}KB)`);
+    this._processAudioBuffer(wavBuffer, true);
+  }
 
-    this.vad.on('speech', async (wavBuffer) => {
-      if (this.busy) return;
-      // Clear active listening timer — it will restart after response
-      if (this._activeListeningTimer) {
-        clearTimeout(this._activeListeningTimer);
-        this._activeListeningTimer = null;
-      }
-      this._log('[VAD] Фраза записана');
-      await this._processAudioBuffer(wavBuffer, true);
-    });
-
-    this.vad.on('error', (err) => {
-      this._error(`[VAD] Ошибка: ${err.message}`);
-    });
+  // Вызывается из electron-main.js при начале речи
+  handleVADSpeechStart() {
+    if (this.busy) return;
+    this._log('[VAD] Речь обнаружена...');
+    this._setState('listening').catch(() => {});
   }
 
   toggleVAD() {
-    if (!this.vad) {
-      this._warn('VAD недоступен — микрофон не настроен');
+    if (!this._vadAvailable) {
+      this._warn('VAD недоступен');
       return false;
     }
 
@@ -219,15 +203,10 @@ class App extends EventEmitter {
       if (this.state === 'listening') {
         this.recorder.forceStop();
       }
-      this.conversationState = 'waiting';
-      this._log('[VAD] Включён' + (this.config.wakeWordEnabled ? ' (скажите "Джарвис", "Колонка" или "Агент")' : ''));
-      this.vad.start().catch(err => {
-        this._error(`[VAD] Ошибка: ${err.message}`);
-        this.vadMode = false;
-      });
+      this._log('[VAD] Включён — слушаю микрофон...');
+      this.emit('vadControl', { action: 'start', config: this._vadConfig });
     } else {
-      this.vad.stop();
-      this._exitActiveListening();
+      this.emit('vadControl', { action: 'stop' });
       this._log('[VAD] Выключен — PTT');
       this.state = 'idle';
       this.busy = false;
@@ -237,48 +216,21 @@ class App extends EventEmitter {
     return this.vadMode;
   }
 
-  // ── Conversation State ──
-
-  _enterActiveListening() {
-    this.conversationState = 'active';
-    this._log(`[VAD] Активное слушание (${this._activeListeningMs / 1000}с)...`);
-
-    this._activeListeningTimer = setTimeout(() => {
-      this._activeListeningTimer = null;
-      // Don't transition if busy processing
-      if (this.busy) return;
-      this._exitActiveListening();
-    }, this._activeListeningMs);
-  }
-
-  _exitActiveListening() {
-    if (this._activeListeningTimer) {
-      clearTimeout(this._activeListeningTimer);
-      this._activeListeningTimer = null;
-    }
-    if (this.conversationState === 'active') {
-      this.conversationState = 'waiting';
-      this._log('[VAD] Ожидание wake word...');
-    }
-  }
+  // ── VAD Pause/Resume ──
 
   _pauseVAD() {
-    if (this.vadMode && this.vad) {
-      this.vad.stop();
+    if (this.vadMode && this._vadAvailable) {
+      this.emit('vadControl', { action: 'pause' });
       this._log('[VAD] Пауза (воспроизведение)');
     }
   }
 
   async _resumeVAD() {
-    if (this.vadMode && this.vad) {
-      // Небольшая задержка, чтобы FFmpeg полностью завершился
-      await new Promise(r => setTimeout(r, 500));
-      try {
-        await this.vad.start();
-        this._log('[VAD] Возобновлён');
-      } catch (err) {
-        this._error(`[VAD] Ошибка возобновления: ${err.message}`);
-      }
+    if (this.vadMode && this._vadAvailable) {
+      // Небольшая задержка после воспроизведения
+      await new Promise(r => setTimeout(r, 300));
+      this.emit('vadControl', { action: 'resume' });
+      this._log('[VAD] Возобновлён');
     }
   }
 
@@ -404,8 +356,9 @@ class App extends EventEmitter {
         },
       });
 
-      // Wake word check для VAD
-      if (fromVAD && this.config.wakeWordEnabled && this.conversationState !== 'active') {
+      // Wake word check — только для PTT с wake word, НЕ для VAD
+      // В VAD режиме каждая фраза идёт напрямую в AI
+      if (!fromVAD && this.config.wakeWordEnabled) {
         const transcript = result.userTranscript || result.transcript || '';
         if (!this.commandParser.containsWakeWord(transcript)) {
           this.busy = false;
@@ -425,9 +378,6 @@ class App extends EventEmitter {
         await this._showIdleDisplay();
         this.state = 'idle';
         this.busy = false;
-        if (fromVAD && this.vadMode) {
-          this._enterActiveListening();
-        }
         return;
       }
 
@@ -464,18 +414,11 @@ class App extends EventEmitter {
       this._error(`Ошибка: ${err.message}`);
       await this._setState('error');
       await new Promise(r => setTimeout(r, 2000));
-      // On error, exit active listening
-      if (fromVAD) this._exitActiveListening();
     }
 
     await this._showIdleDisplay();
     this.state = 'idle';
     this.busy = false;
-
-    // After successful VAD response, enter active listening
-    if (fromVAD && this.vadMode) {
-      this._enterActiveListening();
-    }
   }
 
   async _executeCommand(parsed) {
@@ -509,21 +452,24 @@ class App extends EventEmitter {
     if (this.state === 'listening') {
       this.recorder.forceStop();
     }
-    if (this.vadMode && this.vad) {
-      this.vad.stop();
-      this.vadMode = false;
-      this.emit('vadMode', false);
+    // VAD через Web Audio использует системный микрофон по умолчанию
+    // При смене микрофона перезапускаем VAD чтобы подхватить новый
+    if (this.vadMode && this._vadAvailable) {
+      this.emit('vadControl', { action: 'stop' });
+      setTimeout(() => {
+        this.emit('vadControl', { action: 'start', config: this._vadConfig });
+      }, 300);
     }
 
     this.recorder.setDevice(deviceName, 16000);
-    this._setupVAD(deviceName, 16000);
     this._log(`Микрофон: ${deviceName}`);
     this.emit('micChanged', deviceName);
   }
 
   async shutdown() {
-    this._exitActiveListening();
-    if (this.vad) this.vad.stop();
+    if (this.vadMode && this._vadAvailable) {
+      this.emit('vadControl', { action: 'stop' });
+    }
     this.recorder.forceStop();
     this.player.cleanup();
     await this.display.disconnect();

@@ -226,6 +226,74 @@ document.querySelector('.win-close')?.addEventListener('click', () => {
   ipcRenderer.send('quit');
 });
 
+// ── Web Audio VAD ──
+
+const WebVAD = require('./vad-web');
+let webVad = null;
+
+ipcRenderer.on('vad-control', (_, data) => {
+  const { action, config } = data;
+  switch (action) {
+    case 'start':  startWebVAD(config); break;
+    case 'stop':   stopWebVAD(); break;
+    case 'pause':  pauseWebVAD(); break;
+    case 'resume': resumeWebVAD(); break;
+  }
+});
+
+async function startWebVAD(config = {}) {
+  if (webVad && webVad.isActive) return;
+
+  if (!webVad) {
+    webVad = new WebVAD({
+      threshold: config.threshold || 200,
+      silenceMs: config.silenceMs || 1500,
+    });
+
+    webVad.onSpeechStart = () => {
+      ipcRenderer.send('vad-speech-start');
+    };
+
+    webVad.onSpeech = (wavData) => {
+      // wavData — Uint8Array, конвертируем в Buffer для IPC
+      ipcRenderer.send('vad-speech', Buffer.from(wavData.buffer, wavData.byteOffset, wavData.byteLength));
+    };
+
+    webVad.onDebug = (msg) => {
+      ipcRenderer.send('vad-debug', msg);
+    };
+
+    webVad.onError = (err) => {
+      ipcRenderer.send('vad-error', err.message);
+    };
+  }
+
+  try {
+    await webVad.start();
+  } catch (err) {
+    ipcRenderer.send('vad-error', err.message);
+  }
+}
+
+function stopWebVAD() {
+  if (webVad) {
+    webVad.stop();
+    webVad = null; // пересоздадим при следующем старте с актуальными настройками
+  }
+}
+
+async function pauseWebVAD() {
+  if (webVad && webVad.isActive) {
+    await webVad.pause();
+  }
+}
+
+async function resumeWebVAD() {
+  if (webVad && webVad.isActive) {
+    await webVad.resume();
+  }
+}
+
 // ── Горячие клавиши ──
 
 document.addEventListener('keydown', (e) => {

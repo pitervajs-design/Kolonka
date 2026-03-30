@@ -9,15 +9,16 @@ let kolonkaApp = null;
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (!mainWindow.isVisible()) mainWindow.show();
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
+  return;
 }
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 // Не показывать в dock на macOS (Windows — аналогичное поведение через tray)
 if (process.platform === 'darwin') {
@@ -136,6 +137,13 @@ async function startApp() {
     }
   });
 
+  // Пробрасываем команды управления VAD в renderer
+  kolonkaApp.on('vadControl', (data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('vad-control', data);
+    }
+  });
+
   kolonkaApp.on('micChanged', (name) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('micChanged', name);
@@ -173,6 +181,24 @@ ipcMain.handle('get-mics', async () => {
 
 ipcMain.on('switch-mic', (_, deviceName) => {
   if (kolonkaApp) kolonkaApp.switchMicrophone(deviceName);
+});
+
+// VAD из renderer (Web Audio API)
+ipcMain.on('vad-speech', (_, wavBuffer) => {
+  // IPC structured clone converts Buffer → Uint8Array; convert back
+  if (kolonkaApp) kolonkaApp.handleVADSpeech(Buffer.from(wavBuffer));
+});
+
+ipcMain.on('vad-speech-start', () => {
+  if (kolonkaApp) kolonkaApp.handleVADSpeechStart();
+});
+
+ipcMain.on('vad-debug', (_, msg) => {
+  if (kolonkaApp) kolonkaApp._log(msg);
+});
+
+ipcMain.on('vad-error', (_, msg) => {
+  if (kolonkaApp) kolonkaApp._error(`[WebVAD] ${msg}`);
 });
 
 ipcMain.on('quit', () => {

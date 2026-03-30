@@ -91,17 +91,23 @@ class AI {
     ];
 
     let responseText = '';
-    const stream = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      stream: true,
-    });
+    try {
+      const stream = await this.client.chat.completions.create({
+        model: this.model,
+        messages,
+        stream: true,
+      });
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta;
-      if (delta?.content) {
-        responseText += delta.content;
+      for await (const chunk of stream) {
+        const delta = chunk.choices?.[0]?.delta;
+        if (delta?.content) {
+          responseText += delta.content;
+        }
       }
+    } catch (apiErr) {
+      const detail = apiErr.error?.message || apiErr.message || String(apiErr);
+      const meta = JSON.stringify(apiErr.error?.metadata || apiErr.error || {});
+      throw new Error(`API: ${apiErr.status || '?'} ${detail} body=${meta}`);
     }
 
     // Разбираем структурированный ответ
