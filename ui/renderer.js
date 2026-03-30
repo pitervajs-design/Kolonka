@@ -13,6 +13,7 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const vadLabel = document.getElementById('vadLabel');
 const settingsPanel = document.getElementById('settingsPanel');
+const skillsPanel = document.getElementById('skillsPanel');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 
@@ -49,11 +50,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
 
-    if (page === 'settings') {
-      settingsPanel.style.display = 'block';
-    } else {
-      settingsPanel.style.display = 'none';
-    }
+    settingsPanel.style.display = page === 'settings' ? 'block' : 'none';
+    skillsPanel.style.display = page === 'skills' ? 'block' : 'none';
   });
 });
 

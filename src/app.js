@@ -20,6 +20,11 @@ class App extends EventEmitter {
     this.activeMode = 'pc';
     this.logger = new Logger();
 
+    // Conversation state for VAD mode
+    this.conversationState = 'waiting'; // 'waiting' | 'active'
+    this._activeListeningTimer = null;
+    this._activeListeningMs = parseInt(process.env.ACTIVE_LISTENING_MS) || 10000;
+
     this.config = {
       audioMode: process.env.AUDIO_MODE || 'timebox',
       idleDisplay: process.env.IDLE_DISPLAY || 'icon',
@@ -149,11 +154,24 @@ class App extends EventEmitter {
 
     this._log(`Режим аудио: ${this.activeMode}`);
     this._log(`Модель: ${process.env.AI_MODEL || 'mistralai/voxtral-small-24b-2507'}`);
-    this._log(`Wake word: ${this.config.wakeWordEnabled ? 'Джарвис' : 'выключен'}`);
+    this._log(`Wake word: ${this.config.wakeWordEnabled ? 'Джарвис/Колонка/Агент' : 'выключен'}`);
     this._log(`История: ${this.history.length} сообщений`);
 
     await this._showIdleDisplay();
     this.emit('ready');
+
+    // Автозапуск VAD
+    if (this.vad && this.config.wakeWordEnabled) {
+      this.vadMode = true;
+      this.conversationState = 'waiting';
+      this._log('[VAD] Автозапуск — слушаю wake word...');
+      this.vad.start().catch(err => {
+        this._error(`[VAD] Ошибка автозапуска: ${err.message}`);
+        this.vadMode = false;
+      });
+      this.emit('vadMode', true);
+    }
+
     return true;
   }
 
@@ -175,6 +193,11 @@ class App extends EventEmitter {
 
     this.vad.on('speech', async (wavBuffer) => {
       if (this.busy) return;
+      // Clear active listening timer — it will restart after response
+      if (this._activeListeningTimer) {
+        clearTimeout(this._activeListeningTimer);
+        this._activeListeningTimer = null;
+      }
       this._log('[VAD] Фраза записана');
       await this._processAudioBuffer(wavBuffer, true);
     });
@@ -196,13 +219,15 @@ class App extends EventEmitter {
       if (this.state === 'listening') {
         this.recorder.forceStop();
       }
-      this._log('[VAD] Включён' + (this.config.wakeWordEnabled ? ' (скажите "Джарвис")' : ''));
+      this.conversationState = 'waiting';
+      this._log('[VAD] Включён' + (this.config.wakeWordEnabled ? ' (скажите "Джарвис", "Колонка" или "Агент")' : ''));
       this.vad.start().catch(err => {
         this._error(`[VAD] Ошибка: ${err.message}`);
         this.vadMode = false;
       });
     } else {
       this.vad.stop();
+      this._exitActiveListening();
       this._log('[VAD] Выключен — PTT');
       this.state = 'idle';
       this.busy = false;
@@ -210,6 +235,51 @@ class App extends EventEmitter {
 
     this.emit('vadMode', this.vadMode);
     return this.vadMode;
+  }
+
+  // ── Conversation State ──
+
+  _enterActiveListening() {
+    this.conversationState = 'active';
+    this._log(`[VAD] Активное слушание (${this._activeListeningMs / 1000}с)...`);
+
+    this._activeListeningTimer = setTimeout(() => {
+      this._activeListeningTimer = null;
+      // Don't transition if busy processing
+      if (this.busy) return;
+      this._exitActiveListening();
+    }, this._activeListeningMs);
+  }
+
+  _exitActiveListening() {
+    if (this._activeListeningTimer) {
+      clearTimeout(this._activeListeningTimer);
+      this._activeListeningTimer = null;
+    }
+    if (this.conversationState === 'active') {
+      this.conversationState = 'waiting';
+      this._log('[VAD] Ожидание wake word...');
+    }
+  }
+
+  _pauseVAD() {
+    if (this.vadMode && this.vad) {
+      this.vad.stop();
+      this._log('[VAD] Пауза (воспроизведение)');
+    }
+  }
+
+  async _resumeVAD() {
+    if (this.vadMode && this.vad) {
+      // Небольшая задержка, чтобы FFmpeg полностью завершился
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        await this.vad.start();
+        this._log('[VAD] Возобновлён');
+      } catch (err) {
+        this._error(`[VAD] Ошибка возобновления: ${err.message}`);
+      }
+    }
   }
 
   // ── Push-to-Talk ──
@@ -279,17 +349,22 @@ class App extends EventEmitter {
       }
 
       if (result.emotion && result.emotion !== 'neutral') {
-        this.display.showEmotion(result.emotion, 2000).catch(() => {});
+        this.display.showEmotion(result.emotion, 0).catch(() => {});
       }
 
       if (result.hasAudio && result.audioData.length > 0) {
         await this._setState('speaking');
         this._log('[>>>] Воспроизведение...');
-        if (result.audioFormat === 'mp3') {
-          await this.player.playMp3(result.audioData);
-        } else {
-          const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
-          await this.player.playPcm(result.audioData, sr);
+        this._pauseVAD();
+        try {
+          if (result.audioFormat === 'mp3') {
+            await this.player.playMp3(result.audioData);
+          } else {
+            const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
+            await this.player.playPcm(result.audioData, sr);
+          }
+        } finally {
+          await this._resumeVAD();
         }
       } else if (result.transcript) {
         this._log('(только текст, без аудио)');
@@ -330,15 +405,15 @@ class App extends EventEmitter {
       });
 
       // Wake word check для VAD
-      if (fromVAD && this.config.wakeWordEnabled) {
-        const transcript = result.transcript || result.userTranscript || '';
+      if (fromVAD && this.config.wakeWordEnabled && this.conversationState !== 'active') {
+        const transcript = result.userTranscript || result.transcript || '';
         if (!this.commandParser.containsWakeWord(transcript)) {
           this.busy = false;
           await this._showIdleDisplay();
           this.state = 'idle';
           return;
         }
-        this._log('[Джарвис] Активирован');
+        this._log('[Wake] Активирован');
       }
 
       // Команды
@@ -350,6 +425,9 @@ class App extends EventEmitter {
         await this._showIdleDisplay();
         this.state = 'idle';
         this.busy = false;
+        if (fromVAD && this.vadMode) {
+          this._enterActiveListening();
+        }
         return;
       }
 
@@ -360,17 +438,22 @@ class App extends EventEmitter {
       }
 
       if (result.emotion && result.emotion !== 'neutral') {
-        this.display.showEmotion(result.emotion, 2000).catch(() => {});
+        this.display.showEmotion(result.emotion, 0).catch(() => {});
       }
 
       if (result.hasAudio && result.audioData.length > 0) {
         await this._setState('speaking');
         this._log('[>>>] Воспроизведение...');
-        if (result.audioFormat === 'mp3') {
-          await this.player.playMp3(result.audioData);
-        } else {
-          const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
-          await this.player.playPcm(result.audioData, sr);
+        this._pauseVAD();
+        try {
+          if (result.audioFormat === 'mp3') {
+            await this.player.playMp3(result.audioData);
+          } else {
+            const sr = parseInt(process.env.PLAYBACK_SAMPLE_RATE) || 24000;
+            await this.player.playPcm(result.audioData, sr);
+          }
+        } finally {
+          await this._resumeVAD();
         }
       } else if (result.transcript) {
         this._log('(только текст, без аудио)');
@@ -381,11 +464,18 @@ class App extends EventEmitter {
       this._error(`Ошибка: ${err.message}`);
       await this._setState('error');
       await new Promise(r => setTimeout(r, 2000));
+      // On error, exit active listening
+      if (fromVAD) this._exitActiveListening();
     }
 
     await this._showIdleDisplay();
     this.state = 'idle';
     this.busy = false;
+
+    // After successful VAD response, enter active listening
+    if (fromVAD && this.vadMode) {
+      this._enterActiveListening();
+    }
   }
 
   async _executeCommand(parsed) {
@@ -432,6 +522,7 @@ class App extends EventEmitter {
   }
 
   async shutdown() {
+    this._exitActiveListening();
     if (this.vad) this.vad.stop();
     this.recorder.forceStop();
     this.player.cleanup();

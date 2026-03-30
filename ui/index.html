@@ -18,6 +18,7 @@
           <div class="pixel-cube"></div>
         </div>
         <span class="topbar-title">KOLONKA AI</span>
+        <span class="topbar-version" id="versionLabel"></span>
       </div>
       <div class="topbar-right">
         <button class="win-btn win-min" title="Minimize">_</button>
@@ -58,6 +59,14 @@
             <span>НАСТРОЙКИ</span>
           </a>
         </nav>
+
+        <!-- Skills panel -->
+        <div class="settings-panel" id="skillsPanel" style="display:none;">
+          <div class="skill-item">
+            <div class="skill-name">ЭМОЦИИ</div>
+            <div class="skill-desc">Если в тексте есть слова "злой" или злой/грустный смайлик, лицо агента меняется на злое во время ответа</div>
+          </div>
+        </div>
 
         <!-- Settings panel -->
         <div class="settings-panel" id="settingsPanel" style="display:none;">
@@ -120,7 +129,6 @@
 
   <span id="modeLabel" style="display:none">PTT</span>
   <span id="statusInfo" style="display:none"></span>
-  <span id="versionLabel" style="display:none"></span>
   <span id="stateLabel" style="display:none"></span>
 
   <script src="renderer.js"></script>

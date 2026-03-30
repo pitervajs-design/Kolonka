@@ -95,6 +95,12 @@ body {
   letter-spacing: 1px;
 }
 
+.topbar-version {
+  font-size: 8px;
+  color: var(--text-dim);
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
 .topbar-right {
   display: flex;
   gap: 2px;
@@ -257,6 +263,27 @@ body {
   color: var(--green);
   border-color: var(--green);
   text-shadow: 0 0 4px rgba(51, 204, 51, 0.4);
+}
+
+/* ── Skill Items ── */
+.skill-item {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.skill-name {
+  font-size: 8px;
+  color: var(--accent);
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+  text-shadow: 1px 1px 0 var(--text-shadow);
+}
+
+.skill-desc {
+  font-size: 7px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  text-shadow: 1px 1px 0 var(--text-shadow);
 }
 
 /* ── Sidebar Footer ── */

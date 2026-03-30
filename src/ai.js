@@ -2,10 +2,10 @@ const OpenAI = require('openai');
 const EdgeTTS = require('./tts-edge');
 
 const EMOTION_PATTERNS = {
-  happy:   /\b(рад|здорово|отлично|замечательно|прекрасно|ура|хорошо|весело|смеш|happy|great|awesome)\b/i,
-  sad:     /\b(грустн|печаль|жаль|увы|к сожалению|обидно|плохо|sad|sorry|unfortunately)\b/i,
-  excited: /\b(wow|вау|ого|невероятно|потрясающ|удивительн|amazing|incredible|exciting)\b/i,
-  angry:   /\b(злость|раздраж|ужасн|безобраз|возмутительн|angry|terrible|awful)\b/i,
+  happy:   /(\b(рад|здорово|отлично|замечательно|прекрасно|ура|хорошо|весело|смеш|happy|great|awesome)\b|[😀😃😄😁😊🥰😍🤩😎])/i,
+  sad:     /(\b(грустн|печаль|жаль|увы|к сожалению|обидно|плохо|sad|sorry|unfortunately)\b|[😢😭😞😔😟🥺😿])/i,
+  excited: /(\b(wow|вау|ого|невероятно|потрясающ|удивительн|amazing|incredible|exciting)\b|[🤯🎉🎊🔥💥])/i,
+  angry:   /(\b(злой|злая|злое|злые|злост|злит|раздраж|ужасн|безобраз|возмутительн|бесит|ненавиж|angry|terrible|awful|furious)\b|[😠😡🤬👿💢😤])/i,
 };
 
 function detectEmotion(text) {
